@@ -68,10 +68,10 @@
                     "Settings": [
                         {
                             "Id": "containerItemCount",
-                            "Name": "Container Item Count",
+                            "Name": "Container Item Rolls",
                             "Type": "slider_int",
                             "Default": 3,
-                            "Description": "How many items to spawn in each container when opened.",
+                            "Description": "How many times to roll for an item when opening a container. Each roll may succeed or fail based on rarity percentages.",
                             "Options": {
                                 "Min": 0,
                                 "Max": 50
@@ -79,10 +79,10 @@
                         },
                         {
                             "Id": "enemyItemCount",
-                            "Name": "Normal Enemy Item Count",
+                            "Name": "Normal Enemy Item Rolls",
                             "Type": "slider_int",
                             "Default": 1,
-                            "Description": "How many items to spawn on normal enemies when looted.",
+                            "Description": "How many times to roll for an item when looting a normal enemy. Each roll may succeed or fail based on rarity percentages.",
                             "Options": {
                                 "Min": 0,
                                 "Max": 50
@@ -90,10 +90,10 @@
                         },
                         {
                             "Id": "bossItemCount",
-                            "Name": "Boss Item Count",
+                            "Name": "Boss Item Rolls",
                             "Type": "slider_int",
                             "Default": 10,
-                            "Description": "How many items to spawn on bosses when looted.",
+                            "Description": "How many times to roll for an item when looting a boss. Each roll may succeed or fail based on rarity percentages.",
                             "Options": {
                                 "Min": 0,
                                 "Max": 50
@@ -131,13 +131,13 @@
                         },
                         {
                             "Id": "traderItemCount",
-                            "Name": "Trader Item Count",
+                            "Name": "Trader Item Rolls",
                             "Type": "slider_int",
                             "Default": 10,
-                            "Description": "How many items to add to each trader's inventory.",
+                            "Description": "How many times to roll for an item to add to each trader's inventory. Each roll may succeed or fail based on rarity percentages.",
                             "Options": {
                                 "Min": 0,
-                                "Max": 50
+                                "Max": 100
                             }
                         }
                     ]

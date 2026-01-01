@@ -93,14 +93,19 @@ function RollRarity()
     local roll = math.random(1, 100)
 
     if roll <= legendaryChance then
+        print("[REL_SE] Rarity roll: " .. roll .. "/100 -> legendary (1-" .. legendaryChance .. ")")
         return "legendary"
     elseif roll <= legendaryChance + veryRareChance then
+        print("[REL_SE] Rarity roll: " .. roll .. "/100 -> very rare (" .. (legendaryChance + 1) .. "-" .. (legendaryChance + veryRareChance) .. ")")
         return "very rare"
     elseif roll <= legendaryChance + veryRareChance + rareChance then
+        print("[REL_SE] Rarity roll: " .. roll .. "/100 -> rare (" .. (legendaryChance + veryRareChance + 1) .. "-" .. (legendaryChance + veryRareChance + rareChance) .. ")")
         return "rare"
     elseif roll <= totalChance then
+        print("[REL_SE] Rarity roll: " .. roll .. "/100 -> uncommon (" .. (legendaryChance + veryRareChance + rareChance + 1) .. "-" .. totalChance .. ")")
         return "uncommon"
     else
+        print("[REL_SE] Rarity roll: " .. roll .. "/100 -> no spawn (" .. (totalChance + 1) .. "-100)")
         return nil  -- Item fails to spawn
     end
 end
@@ -216,11 +221,8 @@ function GenerateRandomItem(targetGuid, targetName, containerName)
 
     -- Check if item failed to spawn (roll exceeded total percentage)
     if not rarity then
-        print("[REL_SE] Item failed to spawn - roll exceeded total rarity percentage")
         return nil
     end
-
-    print("[REL_SE] Rolled rarity: " .. rarity)
 
     -- Get items of that rarity
     local itemsOfRarity = GetItemsByRarity(rarity)
