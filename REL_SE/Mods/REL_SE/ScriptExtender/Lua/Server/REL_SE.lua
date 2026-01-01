@@ -16,8 +16,6 @@ Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
 
 -- Ensure Trader table exists (for saves that don't have it yet)
 Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
-Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
-Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
 Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
 Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
 
@@ -191,7 +189,7 @@ function GenerateConsumables(targetGuid, targetName)
     end
 end
 
--- Clear ALL items from a trader's inventory (SYNCHRONOUS)
+-- Clear ALL items from a trader's inventory using TemplateRemoveFrom
 function ClearTraderItems(traderGuid, traderName)
     print("[REL_SE] Clearing ALL items from trader: " .. traderName)
 
@@ -201,37 +199,49 @@ function ClearTraderItems(traderGuid, traderName)
         return
     end
 
+    local templatesCleared = {}
     local itemsCleared = 0
 
-    -- Clear primary inventory
+    -- Collect all item templates from primary inventory
     if entity.InventoryOwner.PrimaryInventory and entity.InventoryOwner.PrimaryInventory.InventoryContainer then
         local items = entity.InventoryOwner.PrimaryInventory.InventoryContainer.Items
         if items then
             for _, p in pairs(items) do
                 if p.Item and p.Item.Uuid and p.Item.Uuid.EntityUuid then
-                    Osi.RequestDelete(p.Item.Uuid.EntityUuid)
-                    itemsCleared = itemsCleared + 1
-                end
-            end
-        end
-    end
-
-    -- Also clear all other inventories (traders may have multiple)
-    if entity.InventoryOwner.Inventories then
-        for _, inventory in pairs(entity.InventoryOwner.Inventories) do
-            local invEntity = Ext.Entity.Get(inventory)
-            if invEntity and invEntity.InventoryContainer and invEntity.InventoryContainer.Items then
-                for _, p in pairs(invEntity.InventoryContainer.Items) do
-                    if p.Item and p.Item.Uuid and p.Item.Uuid.EntityUuid then
-                        Osi.RequestDelete(p.Item.Uuid.EntityUuid)
-                        itemsCleared = itemsCleared + 1
+                    local template = Osi.GetTemplate(p.Item.Uuid.EntityUuid)
+                    if template and not templatesCleared[template] then
+                        templatesCleared[template] = true
                     end
                 end
             end
         end
     end
 
-    print("[REL_SE] Successfully cleared " .. itemsCleared .. " items from trader")
+    -- Collect templates from all other inventories
+    if entity.InventoryOwner.Inventories then
+        for _, inventory in pairs(entity.InventoryOwner.Inventories) do
+            local invEntity = Ext.Entity.Get(inventory)
+            if invEntity and invEntity.InventoryContainer and invEntity.InventoryContainer.Items then
+                for _, p in pairs(invEntity.InventoryContainer.Items) do
+                    if p.Item and p.Item.Uuid and p.Item.Uuid.EntityUuid then
+                        local template = Osi.GetTemplate(p.Item.Uuid.EntityUuid)
+                        if template and not templatesCleared[template] then
+                            templatesCleared[template] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Now remove all collected templates
+    for template, _ in pairs(templatesCleared) do
+        Osi.TemplateRemoveFrom(template, traderGuid, 9999)
+        itemsCleared = itemsCleared + 1
+        print("[REL_SE] Removed template: " .. template)
+    end
+
+    print("[REL_SE] Successfully cleared " .. itemsCleared .. " template types from trader")
 end
 
 -- Generate items for trader and track them for clearing
@@ -464,8 +474,6 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
     -- Ensure Trader table exists (for saves that loaded before this was added)
     Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
     Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
-    Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
-    Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
     Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
     Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
 
@@ -486,64 +494,57 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         return
     end
 
-    -- Check if already processed this session/long rest
-    for _, processedTrader in ipairs(Mods.REL_SE.PersistentVars.Trader.StatusRemoved) do
-        if processedTrader == traderGuid then
-            print("[REL_SE] Trader " .. name .. " already shuffled this long rest")
-            return
-        end
+    -- Determine if we need to process this trader
+    local hasStatus = Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1
+    local isFirstTime = not Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid]
+
+    -- If trader has status, it means long rest happened - they need reshuffling
+    -- If no status and first time, they need initial setup
+    -- If no status and not first time, they were already processed this session
+
+    if not hasStatus and not isFirstTime then
+        print("[REL_SE] Trader " .. name .. " already processed this session")
+        return
     end
 
-    -- Check if trader has NEVER been processed OR if they have the status (meaning it's a new long rest)
-    local needsProcessing = false
+    print("[REL_SE] ======================================")
+    print("[REL_SE] Processing trader: " .. name)
 
-    if Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1 then
-        -- Trader was already processed before, and a long rest happened
-        -- Remove the status to allow re-processing
+    if hasStatus then
+        print("[REL_SE] Long rest detected - reshuffling trader")
         Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
-        needsProcessing = true
-        print("[REL_SE] Long rest detected for trader: " .. name)
-    elseif not Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] then
-        -- Trader has never been processed
-        needsProcessing = true
-        print("[REL_SE] First time encountering trader: " .. name)
+    else
+        print("[REL_SE] First time encountering trader")
     end
 
-    if needsProcessing then
-        print("[REL_SE] ======================================")
-        print("[REL_SE] Processing trader: " .. name)
+    -- Clear ALL items from trader
+    ClearTraderItems(traderGuid, name)
 
-        -- Mark as processed FIRST to prevent double-processing
-        table.insert(Mods.REL_SE.PersistentVars.Trader.StatusRemoved, traderGuid)
-        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = true
+    -- Add 10,000 gold to trader
+    print("[REL_SE] Adding 10,000 gold to: " .. name)
+    Osi.AddGold(traderGuid, 10000)
 
-        -- Clear ALL items from trader (SYNCHRONOUS - completes immediately)
-        ClearTraderItems(traderGuid, name)
+    -- Generate new items
+    GenerateTraderItems(traderGuid, name)
 
-        -- Add 10,000 gold to trader
-        print("[REL_SE] Adding 10,000 gold to: " .. name)
-        Osi.AddGold(traderGuid, 10000)
+    -- Mark as processed
+    Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = true
 
-        -- Generate new items
-        GenerateTraderItems(traderGuid, name)
-
-        -- Apply LOOT_DISTRIBUTED status
-        Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
-        print("[REL_SE] Applied LOOT_DISTRIBUTED_TRADER status to: " .. name)
-        print("[REL_SE] Trader inventory will refresh after long rest")
-        print("[REL_SE] ======================================")
-    end
+    -- Apply LOOT_DISTRIBUTED status (will persist until long rest)
+    Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
+    print("[REL_SE] Applied LOOT_DISTRIBUTED_TRADER status to: " .. name)
+    print("[REL_SE] Trader inventory will refresh after long rest")
+    print("[REL_SE] ======================================")
 end)
 
 -- ====================================================================
 -- LONG REST RESET FOR TRADERS
 -- ====================================================================
 
-Ext.Osiris.RegisterListener("LongRestFinished", 0, "before", function()
+Ext.Osiris.RegisterListener("LongRestFinished", 0, "after", function()
     print("[REL_SE] ======================================")
-    print("[REL_SE] Long rest finished, resetting trader status tracking")
-    Mods.REL_SE.PersistentVars.Trader.StatusRemoved = {}
-    Mods.REL_SE.PersistentVars.Trader.Shuffled = {}
+    print("[REL_SE] Long rest finished - traders will reshuffle on next interaction")
+    print("[REL_SE] (Traders with LOOT_DISTRIBUTED_TRADER status will be cleared and restocked)")
     print("[REL_SE] ======================================")
 end)
 
@@ -559,27 +560,27 @@ function ForceShuffleAllTraders()
     -- Ensure Trader tables exist
     Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
     Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
-    Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
-    Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
     Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
     Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
 
-    -- Clear the tracking tables to allow reshuffling
-    Mods.REL_SE.PersistentVars.Trader.StatusRemoved = {}
-    Mods.REL_SE.PersistentVars.Trader.Shuffled = {}
-
-    -- Remove LOOT_DISTRIBUTED_TRADER from all traders that have it
-    local tradersShuffled = 0
+    -- Remove Generated flag from all traders so they're treated as "first time"
+    -- This combined with removing the status will trigger a reshuffle
+    local tradersReset = 0
     for traderGuid, _ in pairs(Mods.REL_SE.PersistentVars.Trader.Generated) do
+        -- Remove the status if they have it
         if Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1 then
             Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
-            tradersShuffled = tradersShuffled + 1
-            local name = Osi.ResolveTranslatedString(Ext.Entity.Get(traderGuid).DisplayName.NameKey.Handle.Handle)
-            print("[REL_SE] Removed status from trader: " .. name)
         end
+
+        -- Mark as not generated so they'll be processed next trade
+        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = nil
+
+        tradersReset = tradersReset + 1
+        local name = Osi.ResolveTranslatedString(Ext.Entity.Get(traderGuid).DisplayName.NameKey.Handle.Handle)
+        print("[REL_SE] Reset trader: " .. name)
     end
 
-    print("[REL_SE] Reset " .. tradersShuffled .. " traders - they will get NEW items when next opened")
+    print("[REL_SE] Reset " .. tradersReset .. " traders - they will be reshuffled when next opened")
     print("[REL_SE] Old items will be cleared and replaced with new random items")
     print("[REL_SE] ======================================")
 end
