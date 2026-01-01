@@ -646,6 +646,76 @@ Ext.RegisterNetListener("REL_SE_ForceShuffleTraders", function(channel, payload)
 end)
 
 -- ====================================================================
+-- SPAWN ALL ITEMS DEBUG (FOR TESTING)
+-- ====================================================================
+
+-- Function to spawn a pouch with all items from lootlist, sorted by rarity
+function SpawnAllItemsPouch()
+    print("[REL_SE] ======================================")
+    print("[REL_SE] SPAWNING LOOT DEBUG POUCH")
+
+    -- Get the host player
+    local hostCharacter = Osi.GetHostCharacter()
+    if not hostCharacter then
+        print("[REL_SE] ERROR: Could not find host character!")
+        return
+    end
+
+    local playerName = Osi.GetDisplayName(hostCharacter)
+    print("[REL_SE] Adding debug pouch to: " .. playerName)
+
+    -- Create a pouch container (using a standard pouch template)
+    local pouchTemplate = "CONT_GEN_Pouch_A_e88ebe84-4c93-43ee-8945-bbba992e500f"
+    Osi.TemplateAddTo(pouchTemplate, hostCharacter, 1, 1)
+
+    -- We need to find the pouch we just created to add items to it
+    -- For simplicity, we'll just add all items directly to the player
+    -- They can organize them themselves
+
+    -- Sort items by rarity
+    local itemsByRarity = {
+        legendary = {},
+        ["very rare"] = {},
+        rare = {},
+        uncommon = {}
+    }
+
+    -- Organize items by rarity
+    for _, item in ipairs(BigList) do
+        local rarity = item.item_rarity
+        if itemsByRarity[rarity] then
+            table.insert(itemsByRarity[rarity], item)
+        end
+    end
+
+    local totalItems = 0
+
+    -- Add items in rarity order: legendary -> very rare -> rare -> uncommon
+    local rarityOrder = {"legendary", "very rare", "rare", "uncommon"}
+
+    for _, rarity in ipairs(rarityOrder) do
+        local items = itemsByRarity[rarity]
+        if #items > 0 then
+            print("[REL_SE] Adding " .. #items .. " " .. rarity .. " items...")
+            for _, item in ipairs(items) do
+                Osi.TemplateAddTo(item.item_uuid, hostCharacter, 1, 1)
+                totalItems = totalItems + 1
+            end
+        end
+    end
+
+    print("[REL_SE] Successfully added " .. totalItems .. " items to " .. playerName .. "'s inventory")
+    print("[REL_SE] Items are sorted by rarity: Legendary → Very Rare → Rare → Uncommon")
+    print("[REL_SE] ======================================")
+end
+
+-- Network message handler for spawn all items
+Ext.RegisterNetListener("REL_SE_SpawnAllItems", function(channel, payload)
+    print("[REL_SE] Received spawn all items request from client")
+    SpawnAllItemsPouch()
+end)
+
+-- ====================================================================
 -- INITIALIZATION
 -- ====================================================================
 

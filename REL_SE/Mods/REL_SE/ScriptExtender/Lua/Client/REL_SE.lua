@@ -18,4 +18,13 @@ Mods.BG3MCM.IMGUIAPI:InsertModMenuTab(ModuleUUID, "Utilities", function(tabHeade
         print("[REL_SE Client] Sending force shuffle request to server")
         Ext.Net.PostMessageToServer("REL_SE_ForceShuffleTraders", "")
     end
+
+    tabHeader:AddSeparator()
+
+    local SpawnAllButton = tabHeader:AddButton("Spawn Loot Debug Pouch")
+    local SpawnAllDescription = tabHeader:AddText("DEBUG: Spawns a pouch containing every single item from LootList.txt, sorted by rarity (Legendary → Very Rare → Rare → Uncommon). This will be added to your inventory. Use this to test all items in the loot pool.")
+    SpawnAllButton.OnClick = function()
+        print("[REL_SE Client] Sending spawn all items request to server")
+        Ext.Net.PostMessageToServer("REL_SE_SpawnAllItems", "")
+    end
 end)
