@@ -12,13 +12,13 @@ end
 
 -- Persistent storage for per-save data
 Mods.REL_SE = Mods.REL_SE or {}
-Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {
-    Trader = {
-        StatusRemoved = {},  -- Traders who already rolled this long rest
-        Shuffled = {},       -- Traders processed this session
-        Generated = {}       -- Items added to each trader (for removal on reshuffle)
-    }
-}
+Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
+
+-- Ensure Trader table exists (for saves that don't have it yet)
+Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
+Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
+Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
+Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
 
 -- ====================================================================
 -- LOOTLIST READING
@@ -205,10 +205,10 @@ function GenerateTraderItems(traderGuid, traderName)
         end
     end
 
-    -- Generate consumables
-    local scrollCount = Get("scrollCount") or 0
-    local potionCount = Get("potionCount") or 0
-    local arrowCount = Get("arrowCount") or 0
+    -- Generate consumables using trader-specific settings
+    local scrollCount = Get("traderScrollCount") or 2
+    local potionCount = Get("traderPotionCount") or 3
+    local arrowCount = Get("traderArrowCount") or 1
 
     if scrollCount > 0 or potionCount > 0 or arrowCount > 0 then
         print("[REL_SE] --- Generating Consumables ---")

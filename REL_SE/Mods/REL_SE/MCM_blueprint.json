@@ -173,6 +173,39 @@
                                 "Min": 0,
                                 "Max": 50
                             }
+                        },
+                        {
+                            "Id": "traderScrollCount",
+                            "Name": "Trader Scroll Count",
+                            "Type": "slider_int",
+                            "Default": 2,
+                            "Description": "How many scrolls to add to each trader's inventory.",
+                            "Options": {
+                                "Min": 0,
+                                "Max": 20
+                            }
+                        },
+                        {
+                            "Id": "traderPotionCount",
+                            "Name": "Trader Potion Count",
+                            "Type": "slider_int",
+                            "Default": 3,
+                            "Description": "How many potions to add to each trader's inventory.",
+                            "Options": {
+                                "Min": 0,
+                                "Max": 20
+                            }
+                        },
+                        {
+                            "Id": "traderArrowCount",
+                            "Name": "Trader Arrow Count",
+                            "Type": "slider_int",
+                            "Default": 1,
+                            "Description": "How many arrows to add to each trader's inventory.",
+                            "Options": {
+                                "Min": 0,
+                                "Max": 20
+                            }
                         }
                     ]
                 }
