@@ -191,26 +191,49 @@ function GenerateConsumables(targetGuid, targetName)
     end
 end
 
--- Clear all items previously added to a trader
+-- Clear ALL items from a trader's inventory (not just tracked ones)
 function ClearTraderItems(traderGuid, traderName)
-    local itemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid]
+    print("[REL_SE] Clearing ALL items from trader: " .. traderName)
 
-    if not itemsAdded or #itemsAdded == 0 then
-        print("[REL_SE] No tracked items to clear for: " .. traderName)
+    local entity = Ext.Entity.Get(traderGuid)
+    if not entity or not entity.InventoryOwner then
+        print("[REL_SE] ERROR: Could not access trader inventory for: " .. traderName)
         return
     end
 
-    print("[REL_SE] Clearing " .. #itemsAdded .. " item types from: " .. traderName)
+    local inventoryOwner = entity.InventoryOwner
+    if not inventoryOwner.Inventories then
+        print("[REL_SE] No inventories found for: " .. traderName)
+        return
+    end
 
-    -- Remove each item type (remove up to 100 of each to ensure they're all gone)
-    for _, itemUuid in ipairs(itemsAdded) do
-        Osi.TemplateRemoveFrom(itemUuid, traderGuid, 100)
+    local itemsCleared = 0
+
+    -- Iterate through all inventories
+    for _, inventory in pairs(inventoryOwner.Inventories) do
+        local inventoryEntity = Ext.Entity.Get(inventory)
+        if inventoryEntity and inventoryEntity.InventoryContainer then
+            local items = inventoryEntity.InventoryContainer.Items
+            if items then
+                -- Collect item GUIDs first to avoid modifying during iteration
+                local itemGuids = {}
+                for _, item in pairs(items) do
+                    table.insert(itemGuids, item.Item.Uuid.EntityUuid)
+                end
+
+                -- Remove all items
+                for _, itemGuid in ipairs(itemGuids) do
+                    Osi.RequestDelete(itemGuid)
+                    itemsCleared = itemsCleared + 1
+                end
+            end
+        end
     end
 
     -- Clear the tracking table
     Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid] = {}
 
-    print("[REL_SE] Successfully cleared trader items")
+    print("[REL_SE] Successfully cleared " .. itemsCleared .. " items from trader")
 end
 
 -- Generate items for trader and track them for clearing
@@ -486,10 +509,8 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         print("[REL_SE] ======================================")
         print("[REL_SE] Trader opened: " .. name)
 
-        -- Clear previous items if this trader was already visited
-        if Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] then
-            ClearTraderItems(traderGuid, name)
-        end
+        -- ALWAYS clear ALL items from trader (including vanilla items)
+        ClearTraderItems(traderGuid, name)
 
         -- Add 10,000 gold to trader (gold pile template)
         print("[REL_SE] Adding 10,000 gold to: " .. name)
