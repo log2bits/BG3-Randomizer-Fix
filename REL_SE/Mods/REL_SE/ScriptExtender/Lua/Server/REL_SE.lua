@@ -80,6 +80,7 @@ BigList = LoadLootList()
 -- ====================================================================
 
 -- Roll for a rarity based on configured percentages
+-- Only rolls for uncommon, rare, very rare, and legendary (no common)
 function RollRarity()
     local uncommonChance = Get("uncommonChance") or 25
     local rareChance = Get("rareChance") or 15
@@ -94,10 +95,8 @@ function RollRarity()
         return "very rare"
     elseif roll <= legendaryChance + veryRareChance + rareChance then
         return "rare"
-    elseif roll <= legendaryChance + veryRareChance + rareChance + uncommonChance then
-        return "uncommon"
     else
-        return "common"
+        return "uncommon"  -- Default to uncommon, no common rarity
     end
 end
 
@@ -112,31 +111,50 @@ function GetItemsByRarity(rarity)
     return items
 end
 
--- Get all items of a specific type (e.g., "scroll", "potion", "arrow")
-function GetItemsByType(itemType)
+-- Get all items of a specific type and rarity
+function GetItemsByTypeAndRarity(itemType, rarity)
     local items = {}
     for i, item in ipairs(BigList) do
-        if item.item_type == itemType then
+        if item.item_type == itemType and item.item_rarity == rarity then
             table.insert(items, i)
         end
     end
     return items
 end
 
--- Generate a random consumable of a specific type
+-- Generate a random consumable of a specific type using rarity distribution
 function GenerateConsumable(targetGuid, targetName, consumableType)
-    local itemsOfType = GetItemsByType(consumableType)
+    -- Roll for rarity using same distribution as regular items
+    local rarity = RollRarity()
+    print("[REL_SE] Rolled rarity for " .. consumableType .. ": " .. rarity)
 
-    if #itemsOfType == 0 then
-        print("[REL_SE] No " .. consumableType .. "s found in loot list")
+    -- Get consumables of this type and rarity
+    local itemsOfTypeAndRarity = GetItemsByTypeAndRarity(consumableType, rarity)
+
+    -- If no items of that rarity, try next lower rarity
+    while #itemsOfTypeAndRarity == 0 and rarity ~= "uncommon" do
+        print("[REL_SE] No " .. consumableType .. "s found for rarity: " .. rarity .. ", trying lower rarity...")
+        if rarity == "legendary" then
+            rarity = "very rare"
+        elseif rarity == "very rare" then
+            rarity = "rare"
+        elseif rarity == "rare" then
+            rarity = "uncommon"
+        end
+        itemsOfTypeAndRarity = GetItemsByTypeAndRarity(consumableType, rarity)
+    end
+
+    -- If still no items found, skip this consumable
+    if #itemsOfTypeAndRarity == 0 then
+        print("[REL_SE] No " .. consumableType .. "s found in loot list for any rarity, skipping")
         return false
     end
 
-    -- Pick a random item of this type
-    local randomIndex = itemsOfType[math.random(1, #itemsOfType)]
+    -- Pick a random item from the filtered list
+    local randomIndex = itemsOfTypeAndRarity[math.random(1, #itemsOfTypeAndRarity)]
     local item = BigList[randomIndex]
 
-    print("[REL_SE] Adding " .. consumableType .. ": " .. item.item_name .. " to " .. targetName)
+    print("[REL_SE] Adding " .. consumableType .. ": " .. item.item_name .. " (" .. rarity .. ") to " .. targetName)
     Osi.TemplateAddTo(item.item_uuid, targetGuid, 1, 0)
     return true
 end
@@ -185,7 +203,7 @@ function GenerateRandomItem(targetGuid, targetName)
     local itemsOfRarity = GetItemsByRarity(rarity)
 
     -- If no items of that rarity, try next lower rarity
-    while #itemsOfRarity == 0 and rarity ~= "common" do
+    while #itemsOfRarity == 0 and rarity ~= "uncommon" do
         print("[REL_SE] No items found for rarity: " .. rarity .. ", trying lower rarity...")
         if rarity == "legendary" then
             rarity = "very rare"
@@ -193,20 +211,14 @@ function GenerateRandomItem(targetGuid, targetName)
             rarity = "rare"
         elseif rarity == "rare" then
             rarity = "uncommon"
-        elseif rarity == "uncommon" then
-            rarity = "common"
         end
         itemsOfRarity = GetItemsByRarity(rarity)
     end
 
-    -- If still no items, pick any random item
+    -- If still no items found, skip this item
     if #itemsOfRarity == 0 then
-        print("[REL_SE] No items found for any rarity, picking random item...")
-        local randomIndex = math.random(1, #BigList)
-        local item = BigList[randomIndex]
-        print("[REL_SE] Adding item: " .. item.item_name .. " (UUID: " .. item.item_uuid .. ") to " .. targetName)
-        Osi.TemplateAddTo(item.item_uuid, targetGuid, 1, 0)
-        return true
+        print("[REL_SE] No items found in loot list for any rarity, skipping this item")
+        return false
     end
 
     -- Pick random item from the rarity list
