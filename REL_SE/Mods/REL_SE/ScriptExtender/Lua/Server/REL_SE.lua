@@ -236,9 +236,9 @@ end)
 -- DEAD CHARACTER LOOT DISTRIBUTION
 -- ====================================================================
 
-Ext.Osiris.RegisterListener("RequestCanLoot", 4, "before", function(_, targetGuid, _, _)
-    -- Only process dead characters
-    if Osi.IsCharacter(targetGuid) ~= 1 or Osi.IsDead(targetGuid) ~= 1 then
+Ext.Osiris.RegisterListener("RequestCanLoot", 2, "before", function(looter, targetGuid)
+    -- Only process dead characters that are not in the party (enemies and neutrals)
+    if Osi.IsDead(targetGuid) ~= 1 or Osi.IsInPartyWith(looter, targetGuid) == 1 then
         return
     end
 
@@ -251,10 +251,12 @@ Ext.Osiris.RegisterListener("RequestCanLoot", 4, "before", function(_, targetGui
 
     print("[REL_SE] ======================================")
     print("[REL_SE] Dead character looted: " .. name)
+    print("[REL_SE] Looter: " .. Osi.GetDisplayName(looter))
 
     -- Check blacklist
     if IsBlacklisted(name) then
         Osi.ApplyStatus(targetGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
+        print("[REL_SE] Blacklisted, skipping")
         return
     end
 
@@ -267,7 +269,7 @@ Ext.Osiris.RegisterListener("RequestCanLoot", 4, "before", function(_, targetGui
         print("[REL_SE] Target is a BOSS, generating " .. itemCount .. " items")
     else
         itemCount = Get("enemyItemCount") or 1
-        print("[REL_SE] Target is a normal enemy, generating " .. itemCount .. " items")
+        print("[REL_SE] Target is a normal enemy/neutral, generating " .. itemCount .. " items")
     end
 
     -- Generate items
