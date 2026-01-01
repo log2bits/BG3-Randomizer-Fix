@@ -218,7 +218,10 @@ function ClearTraderItems(traderGuid, traderName)
                 -- Collect item GUIDs first to avoid modifying during iteration
                 local itemGuids = {}
                 for _, item in pairs(items) do
-                    table.insert(itemGuids, item.Item.Uuid.EntityUuid)
+                    -- Safety check: some items may not have a Uuid
+                    if item.Item and item.Item.Uuid and item.Item.Uuid.EntityUuid then
+                        table.insert(itemGuids, item.Item.Uuid.EntityUuid)
+                    end
                 end
 
                 -- Remove all items
@@ -512,9 +515,10 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         -- ALWAYS clear ALL items from trader (including vanilla items)
         ClearTraderItems(traderGuid, name)
 
-        -- Add 10,000 gold to trader (gold pile template)
+        -- Add 10,000 gold to trader
         print("[REL_SE] Adding 10,000 gold to: " .. name)
-        Osi.TemplateAddTo("3d284eb4-288c-4cc4-b9c0-7d8f3a6f18c0", traderGuid, 10000, 0)
+        -- Using gold coin template UUID
+        Osi.TemplateAddTo("6ef69911-79d1-48e7-b024-fa2f4e03c1f2", traderGuid, 10000, 0)
 
         -- Generate new items
         GenerateTraderItems(traderGuid, name)
