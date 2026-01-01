@@ -443,6 +443,13 @@ end)
 -- ====================================================================
 
 Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid, _, _)
+    -- Ensure Trader table exists (for saves that loaded before this was added)
+    Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
+    Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
+    Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
+    Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
+    Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
+
     -- Check if trader support is enabled
     if not Get("traderEnabled") then
         return
@@ -507,6 +514,47 @@ Ext.Osiris.RegisterListener("LongRestFinished", 0, "before", function()
     Mods.REL_SE.PersistentVars.Trader.StatusRemoved = {}
     Mods.REL_SE.PersistentVars.Trader.Shuffled = {}
     print("[REL_SE] ======================================")
+end)
+
+-- ====================================================================
+-- FORCE SHUFFLE ALL TRADERS (FOR TESTING)
+-- ====================================================================
+
+-- Function to force shuffle all traders
+function ForceShuffleAllTraders()
+    print("[REL_SE] ======================================")
+    print("[REL_SE] FORCE SHUFFLING ALL TRADERS")
+
+    -- Ensure Trader tables exist
+    Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
+    Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
+    Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
+    Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
+    Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
+
+    -- Clear the tracking tables to allow reshuffling
+    Mods.REL_SE.PersistentVars.Trader.StatusRemoved = {}
+    Mods.REL_SE.PersistentVars.Trader.Shuffled = {}
+
+    -- Remove LOOT_DISTRIBUTED_TRADER from all traders that have it
+    local tradersShuffled = 0
+    for traderGuid, _ in pairs(Mods.REL_SE.PersistentVars.Trader.Generated) do
+        if Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1 then
+            Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
+            tradersShuffled = tradersShuffled + 1
+            local name = Osi.ResolveTranslatedString(Ext.Entity.Get(traderGuid).DisplayName.NameKey.Handle.Handle)
+            print("[REL_SE] Removed status from trader: " .. name)
+        end
+    end
+
+    print("[REL_SE] Reset " .. tradersShuffled .. " traders - they will reshuffle when next opened")
+    print("[REL_SE] ======================================")
+end
+
+-- Network message handler for force shuffle
+Ext.RegisterNetListener("REL_SE_ForceShuffleTraders", function(channel, payload)
+    print("[REL_SE] Received force shuffle request from client")
+    ForceShuffleAllTraders()
 end)
 
 -- ====================================================================
