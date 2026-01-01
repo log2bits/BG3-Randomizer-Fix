@@ -274,14 +274,28 @@ end
 
 function IsBlacklisted(name)
     local blacklist = Get("BlackList")
-    if not blacklist or not blacklist.elements then
+    if not blacklist then
         return false
     end
 
-    for _, v in pairs(blacklist.elements) do
-        if v.enabled and v.name == name then
-            print("[REL_SE] " .. name .. " is blacklisted, skipping")
-            return true
+    -- Check if the entire blacklist is disabled
+    if blacklist.enabled == false then
+        return false
+    end
+
+    -- Check if elements array exists
+    if not blacklist.elements or type(blacklist.elements) ~= "table" then
+        return false
+    end
+
+    -- Check each blacklist entry
+    for _, entry in ipairs(blacklist.elements) do
+        if entry and type(entry) == "table" then
+            -- Match by name (case-sensitive)
+            if entry.enabled ~= false and entry.name == name then
+                print("[REL_SE] " .. name .. " is blacklisted, skipping")
+                return true
+            end
         end
     end
 

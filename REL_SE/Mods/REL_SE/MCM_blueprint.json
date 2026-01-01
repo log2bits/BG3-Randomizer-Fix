@@ -155,25 +155,17 @@
                         {
                             "Id": "BlackList",
                             "Name": "Blacklist",
-                            "Type": "list",
+                            "Type": "list_v2",
                             "Default": {
+                                "enabled": true,
                                 "elements": []
                             },
-                            "Description": "Add containers, enemies, or traders by name to prevent them from receiving random loot.",
+                            "Description": "Add containers, enemies, or traders by name to prevent them from receiving random loot. Type the exact name (case-sensitive) and press Enter to add.",
                             "Options": {
-                                "element": {
-                                    "name": {
-                                        "Type": "text",
-                                        "Name": "Name",
-                                        "Description": "The name of the container/enemy/trader to blacklist."
-                                    },
-                                    "enabled": {
-                                        "Type": "checkbox",
-                                        "Name": "Enabled",
-                                        "Description": "Whether this blacklist entry is active.",
-                                        "Default": true
-                                    }
-                                }
+                                "AllowReordering": false,
+                                "PageSize": 10,
+                                "ReadOnly": false,
+                                "ShowSearchBar": true
                             }
                         }
                     ]
