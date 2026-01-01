@@ -82,12 +82,14 @@ BigList = LoadLootList()
 
 -- Roll for a rarity based on configured percentages
 -- Only rolls for uncommon, rare, very rare, and legendary (no common)
+-- Returns nil if roll exceeds total percentage (allows fail-to-spawn)
 function RollRarity()
     local uncommonChance = Get("uncommonChance") or 25
     local rareChance = Get("rareChance") or 15
     local veryRareChance = Get("veryRareChance") or 8
     local legendaryChance = Get("legendaryChance") or 3
 
+    local totalChance = legendaryChance + veryRareChance + rareChance + uncommonChance
     local roll = math.random(1, 100)
 
     if roll <= legendaryChance then
@@ -96,8 +98,10 @@ function RollRarity()
         return "very rare"
     elseif roll <= legendaryChance + veryRareChance + rareChance then
         return "rare"
+    elseif roll <= totalChance then
+        return "uncommon"
     else
-        return "uncommon"  -- Default to uncommon, no common rarity
+        return nil  -- Item fails to spawn
     end
 end
 
@@ -209,6 +213,13 @@ function GenerateRandomItem(targetGuid, targetName, containerName)
 
     -- Roll for rarity
     local rarity = RollRarity()
+
+    -- Check if item failed to spawn (roll exceeded total percentage)
+    if not rarity then
+        print("[REL_SE] Item failed to spawn - roll exceeded total rarity percentage")
+        return nil
+    end
+
     print("[REL_SE] Rolled rarity: " .. rarity)
 
     -- Get items of that rarity
