@@ -15,7 +15,8 @@ Mods.REL_SE = Mods.REL_SE or {}
 Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {
     Trader = {
         StatusRemoved = {},  -- Traders who already rolled this long rest
-        Shuffled = {}        -- Traders processed this session
+        Shuffled = {},       -- Traders processed this session
+        Generated = {}       -- Items added to each trader (for removal on reshuffle)
     }
 }
 
@@ -123,6 +124,7 @@ function GetItemsByTypeAndRarity(itemType, rarity)
 end
 
 -- Generate a random consumable of a specific type using rarity distribution
+-- Returns the item UUID if successful, nil otherwise
 function GenerateConsumable(targetGuid, targetName, consumableType)
     -- Roll for rarity using same distribution as regular items
     local rarity = RollRarity()
@@ -147,7 +149,7 @@ function GenerateConsumable(targetGuid, targetName, consumableType)
     -- If still no items found, skip this consumable
     if #itemsOfTypeAndRarity == 0 then
         print("[REL_SE] No " .. consumableType .. "s found in loot list for any rarity, skipping")
-        return false
+        return nil
     end
 
     -- Pick a random item from the filtered list
@@ -156,7 +158,7 @@ function GenerateConsumable(targetGuid, targetName, consumableType)
 
     print("[REL_SE] Adding " .. consumableType .. ": " .. item.item_name .. " (" .. rarity .. ") to " .. targetName)
     Osi.TemplateAddTo(item.item_uuid, targetGuid, 1, 0)
-    return true
+    return item.item_uuid
 end
 
 -- Generate multiple consumables
@@ -188,11 +190,90 @@ function GenerateConsumables(targetGuid, targetName)
     end
 end
 
+-- Generate items for trader and track them for later removal
+function GenerateTraderItems(traderGuid, traderName)
+    local addedItems = {}
+
+    -- Generate regular items
+    local itemCount = Get("traderItemCount") or 5
+    print("[REL_SE] Generating " .. itemCount .. " items for: " .. traderName)
+    for i = 1, itemCount do
+        print("[REL_SE] Generating item " .. i .. "/" .. itemCount)
+        local uuid = GenerateRandomItem(traderGuid, traderName)
+        if uuid then
+            table.insert(addedItems, uuid)
+        end
+    end
+
+    -- Generate consumables
+    local scrollCount = Get("scrollCount") or 0
+    local potionCount = Get("potionCount") or 0
+    local arrowCount = Get("arrowCount") or 0
+
+    if scrollCount > 0 or potionCount > 0 or arrowCount > 0 then
+        print("[REL_SE] --- Generating Consumables ---")
+    end
+
+    for i = 1, scrollCount do
+        print("[REL_SE] Generating scroll " .. i .. "/" .. scrollCount)
+        local uuid = GenerateConsumable(traderGuid, traderName, "scroll")
+        if uuid then
+            table.insert(addedItems, uuid)
+        end
+    end
+
+    for i = 1, potionCount do
+        print("[REL_SE] Generating potion " .. i .. "/" .. potionCount)
+        local uuid = GenerateConsumable(traderGuid, traderName, "potion")
+        if uuid then
+            table.insert(addedItems, uuid)
+        end
+    end
+
+    for i = 1, arrowCount do
+        print("[REL_SE] Generating arrow " .. i .. "/" .. arrowCount)
+        local uuid = GenerateConsumable(traderGuid, traderName, "arrow")
+        if uuid then
+            table.insert(addedItems, uuid)
+        end
+    end
+
+    print("[REL_SE] Finished generating items for: " .. traderName)
+    return addedItems
+end
+
+-- Remove previously generated items from trader
+function ClearTraderItems(traderGuid, traderName)
+    local generatedItems = Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid]
+
+    if not generatedItems or #generatedItems == 0 then
+        print("[REL_SE] No previous items to clear for: " .. traderName)
+        return
+    end
+
+    print("[REL_SE] Clearing " .. #generatedItems .. " previous items from: " .. traderName)
+
+    for _, templateUuid in ipairs(generatedItems) do
+        -- Remove all instances of this template from trader's inventory
+        local removedCount = 0
+        while Osi.TemplateIsInInventory(templateUuid, traderGuid) == 1 do
+            Osi.TemplateRemoveFrom(templateUuid, traderGuid, 1)
+            removedCount = removedCount + 1
+        end
+        if removedCount > 0 then
+            print("[REL_SE] Removed " .. removedCount .. " x " .. templateUuid)
+        end
+    end
+
+    print("[REL_SE] Finished clearing items from: " .. traderName)
+end
+
 -- Generate a random item and add it to container/trader
+-- Returns the item UUID if successful, nil otherwise
 function GenerateRandomItem(targetGuid, targetName)
     if #BigList == 0 then
         print("[REL_SE] ERROR: BigList is empty! Cannot generate loot.")
-        return false
+        return nil
     end
 
     -- Roll for rarity
@@ -218,7 +299,7 @@ function GenerateRandomItem(targetGuid, targetName)
     -- If still no items found, skip this item
     if #itemsOfRarity == 0 then
         print("[REL_SE] No items found in loot list for any rarity, skipping this item")
-        return false
+        return nil
     end
 
     -- Pick random item from the rarity list
@@ -227,7 +308,7 @@ function GenerateRandomItem(targetGuid, targetName)
 
     print("[REL_SE] Adding item: " .. item.item_name .. " (" .. rarity .. ") to " .. targetName)
     Osi.TemplateAddTo(item.item_uuid, targetGuid, 1, 0)
-    return true
+    return item.item_uuid
 end
 
 -- Generate multiple items for a container/trader
@@ -389,10 +470,10 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
             end
         end
 
-        -- Remove status to allow re-rolling
+        -- Remove status to allow re-rolling (after long rest)
         Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
         table.insert(Mods.REL_SE.PersistentVars.Trader.StatusRemoved, traderGuid)
-        print("[REL_SE] Removed LOOT_DISTRIBUTED_TRADER status from: " .. name)
+        print("[REL_SE] Removed LOOT_DISTRIBUTED_TRADER status from: " .. name .. " (preparing for reshuffle)")
     end
 
     -- Check if not already processed
@@ -400,14 +481,14 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         print("[REL_SE] ======================================")
         print("[REL_SE] Trader opened: " .. name)
 
-        -- Get item count from config
-        local itemCount = Get("traderItemCount") or 5
+        -- Clear old items from previous long rest
+        ClearTraderItems(traderGuid, name)
 
-        -- Generate items
-        GenerateMultipleItems(traderGuid, name, itemCount)
+        -- Generate new items and track them
+        local addedItems = GenerateTraderItems(traderGuid, name)
 
-        -- Generate consumables
-        GenerateConsumables(traderGuid, name)
+        -- Store the generated items for next reshuffle
+        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = addedItems
 
         -- Apply LOOT_DISTRIBUTED status
         Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
