@@ -18,6 +18,7 @@ Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
 Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
 Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
 Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
+Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession = Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession or {}
 
 -- ====================================================================
 -- LOOTLIST READING
@@ -470,12 +471,13 @@ end)
 -- TRADER SUPPORT
 -- ====================================================================
 
-Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid, _, _)
+Ext.Osiris.RegisterListener("RequestTrade", 4, "after", function(_, traderGuid, _, _)
     -- Ensure Trader table exists (for saves that loaded before this was added)
     Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
     Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
     Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
     Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
+    Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession = Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession or {}
 
     -- Check if trader support is enabled
     if not Get("traderEnabled") then
@@ -494,25 +496,18 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         return
     end
 
-    -- Determine if we need to process this trader
-    local hasStatus = Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1
-    local isFirstTime = not Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid]
-
-    -- If trader has status, it means long rest happened - they need reshuffling
-    -- If no status and first time, they need initial setup
-    -- If no status and not first time, they were already processed this session
-
-    if not hasStatus and not isFirstTime then
-        print("[REL_SE] Trader " .. name .. " already processed this session")
+    -- Check if already processed this session
+    if Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession[traderGuid] then
+        print("[REL_SE] Trader " .. name .. " already processed this session, skipping")
         return
     end
 
     print("[REL_SE] ======================================")
     print("[REL_SE] Processing trader: " .. name)
 
-    if hasStatus then
-        print("[REL_SE] Long rest detected - reshuffling trader")
-        Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
+    -- Check if this is a reshuffle (they were generated before) or first time
+    if Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] then
+        print("[REL_SE] Reshuffling trader (long rest or force shuffle)")
     else
         print("[REL_SE] First time encountering trader")
     end
@@ -529,8 +524,9 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
 
     -- Mark as processed
     Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = true
+    Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession[traderGuid] = true
 
-    -- Apply LOOT_DISTRIBUTED status (will persist until long rest)
+    -- Apply LOOT_DISTRIBUTED status (for tracking, though we mainly use ProcessedThisSession now)
     Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
     print("[REL_SE] Applied LOOT_DISTRIBUTED_TRADER status to: " .. name)
     print("[REL_SE] Trader inventory will refresh after long rest")
@@ -543,8 +539,14 @@ end)
 
 Ext.Osiris.RegisterListener("LongRestFinished", 0, "after", function()
     print("[REL_SE] ======================================")
-    print("[REL_SE] Long rest finished - traders will reshuffle on next interaction")
-    print("[REL_SE] (Traders with LOOT_DISTRIBUTED_TRADER status will be cleared and restocked)")
+    print("[REL_SE] Long rest finished - clearing session tracking")
+
+    -- Clear the session tracking so traders can be reshuffled
+    Mods.REL_SE.PersistentVars = Mods.REL_SE.PersistentVars or {}
+    Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
+    Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession = {}
+
+    print("[REL_SE] Traders will be reshuffled on next interaction")
     print("[REL_SE] ======================================")
 end)
 
@@ -562,19 +564,13 @@ function ForceShuffleAllTraders()
     Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
     Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
     Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
+    Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession = Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession or {}
 
-    -- Remove Generated flag from all traders so they're treated as "first time"
-    -- This combined with removing the status will trigger a reshuffle
+    -- Clear session tracking to allow reshuffling
+    Mods.REL_SE.PersistentVars.Trader.ProcessedThisSession = {}
+
     local tradersReset = 0
     for traderGuid, _ in pairs(Mods.REL_SE.PersistentVars.Trader.Generated) do
-        -- Remove the status if they have it
-        if Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1 then
-            Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
-        end
-
-        -- Mark as not generated so they'll be processed next trade
-        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = nil
-
         tradersReset = tradersReset + 1
         local name = Osi.ResolveTranslatedString(Ext.Entity.Get(traderGuid).DisplayName.NameKey.Handle.Handle)
         print("[REL_SE] Reset trader: " .. name)
