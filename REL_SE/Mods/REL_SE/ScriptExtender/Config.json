@@ -1,0 +1,9 @@
+
+{
+    	"RequiredVersion": 17,
+    	"ModTable": "REL_SE",
+    	"FeatureFlags": [
+	"Lua"
+	]
+}
+                    
