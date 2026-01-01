@@ -19,6 +19,7 @@ Mods.REL_SE.PersistentVars.Trader = Mods.REL_SE.PersistentVars.Trader or {}
 Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
 Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
 Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
+Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
 
 -- ====================================================================
 -- LOOTLIST READING
@@ -190,14 +191,42 @@ function GenerateConsumables(targetGuid, targetName)
     end
 end
 
--- Generate items for trader (no tracking needed - just add items)
+-- Clear all items previously added to a trader
+function ClearTraderItems(traderGuid, traderName)
+    local itemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid]
+
+    if not itemsAdded or #itemsAdded == 0 then
+        print("[REL_SE] No tracked items to clear for: " .. traderName)
+        return
+    end
+
+    print("[REL_SE] Clearing " .. #itemsAdded .. " item types from: " .. traderName)
+
+    -- Remove each item type (remove up to 100 of each to ensure they're all gone)
+    for _, itemUuid in ipairs(itemsAdded) do
+        Osi.TemplateRemoveFrom(itemUuid, traderGuid, 100)
+    end
+
+    -- Clear the tracking table
+    Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid] = {}
+
+    print("[REL_SE] Successfully cleared trader items")
+end
+
+-- Generate items for trader and track them for clearing
 function GenerateTraderItems(traderGuid, traderName)
+    -- Initialize tracking table for this trader
+    Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid] = Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid] or {}
+
     -- Generate regular items
     local itemCount = Get("traderItemCount") or 5
     print("[REL_SE] Generating " .. itemCount .. " items for: " .. traderName)
     for i = 1, itemCount do
         print("[REL_SE] Generating item " .. i .. "/" .. itemCount)
-        GenerateRandomItem(traderGuid, traderName)
+        local itemUuid = GenerateRandomItem(traderGuid, traderName)
+        if itemUuid then
+            table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
+        end
     end
 
     -- Generate consumables using trader-specific settings
@@ -211,17 +240,26 @@ function GenerateTraderItems(traderGuid, traderName)
 
     for i = 1, scrollCount do
         print("[REL_SE] Generating scroll " .. i .. "/" .. scrollCount)
-        GenerateConsumable(traderGuid, traderName, "scroll")
+        local itemUuid = GenerateConsumable(traderGuid, traderName, "scroll")
+        if itemUuid then
+            table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
+        end
     end
 
     for i = 1, potionCount do
         print("[REL_SE] Generating potion " .. i .. "/" .. potionCount)
-        GenerateConsumable(traderGuid, traderName, "potion")
+        local itemUuid = GenerateConsumable(traderGuid, traderName, "potion")
+        if itemUuid then
+            table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
+        end
     end
 
     for i = 1, arrowCount do
         print("[REL_SE] Generating arrow " .. i .. "/" .. arrowCount)
-        GenerateConsumable(traderGuid, traderName, "arrow")
+        local itemUuid = GenerateConsumable(traderGuid, traderName, "arrow")
+        if itemUuid then
+            table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
+        end
     end
 
     print("[REL_SE] Finished generating items for: " .. traderName)
@@ -408,6 +446,7 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
     Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
     Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
     Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
+    Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
 
     -- Check if trader support is enabled
     if not Get("traderEnabled") then
@@ -447,7 +486,16 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         print("[REL_SE] ======================================")
         print("[REL_SE] Trader opened: " .. name)
 
-        -- Generate new items (cumulative - old items remain)
+        -- Clear previous items if this trader was already visited
+        if Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] then
+            ClearTraderItems(traderGuid, name)
+        end
+
+        -- Add 10,000 gold to trader (gold pile template)
+        print("[REL_SE] Adding 10,000 gold to: " .. name)
+        Osi.TemplateAddTo("3d284eb4-288c-4cc4-b9c0-7d8f3a6f18c0", traderGuid, 10000, 0)
+
+        -- Generate new items
         GenerateTraderItems(traderGuid, name)
 
         -- Mark this trader as visited
@@ -488,6 +536,7 @@ function ForceShuffleAllTraders()
     Mods.REL_SE.PersistentVars.Trader.StatusRemoved = Mods.REL_SE.PersistentVars.Trader.StatusRemoved or {}
     Mods.REL_SE.PersistentVars.Trader.Shuffled = Mods.REL_SE.PersistentVars.Trader.Shuffled or {}
     Mods.REL_SE.PersistentVars.Trader.Generated = Mods.REL_SE.PersistentVars.Trader.Generated or {}
+    Mods.REL_SE.PersistentVars.Trader.ItemsAdded = Mods.REL_SE.PersistentVars.Trader.ItemsAdded or {}
 
     -- Clear the tracking tables to allow reshuffling
     Mods.REL_SE.PersistentVars.Trader.StatusRemoved = {}
@@ -505,7 +554,7 @@ function ForceShuffleAllTraders()
     end
 
     print("[REL_SE] Reset " .. tradersShuffled .. " traders - they will get NEW items when next opened")
-    print("[REL_SE] Note: Old trader items remain, new items are added on top (cumulative)")
+    print("[REL_SE] Old items will be cleared and replaced with new random items")
     print("[REL_SE] ======================================")
 end
 
