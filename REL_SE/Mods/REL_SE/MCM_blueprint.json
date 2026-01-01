@@ -98,6 +98,17 @@
                                 "Min": 0,
                                 "Max": 50
                             }
+                        },
+                        {
+                            "Id": "commonContainerSpawnChance",
+                            "Name": "Common Container Spawn Chance (%)",
+                            "Type": "slider_int",
+                            "Default": 20,
+                            "Description": "The chance (%) for EACH item to spawn in common containers (barrels, crates, etc.). Regular chests have 100% chance. This applies per-item, not per-container.",
+                            "Options": {
+                                "Min": 0,
+                                "Max": 100
+                            }
                         }
                     ]
                 }
