@@ -448,11 +448,21 @@ Ext.Osiris.RegisterListener("UseStarted", 2, "before", function(_, containerGuid
     end
 
     -- Check if container is in someone's inventory (being opened from trade window)
-    local entity = Ext.Entity.Get(containerGuid)
-    if entity and entity.InventoryMember and entity.InventoryMember.Inventory then
-        local parentInventory = Ext.Entity.Get(entity.InventoryMember.Inventory)
-        if parentInventory and parentInventory.InventoryOwner then
-            print("[REL_SE] Container is in someone's inventory, skipping loot generation")
+    -- Get the owner of this container by checking InventoryOwner
+    local containerOwner = Osi.GetInventoryOwner(containerGuid)
+    if containerOwner then
+        -- Check if the owner is a trader (can trade)
+        if Osi.CanTrade(containerOwner) == 1 then
+            local ownerName = Osi.GetDisplayName(containerOwner) or "Unknown Trader"
+            print("[REL_SE] Container belongs to trader " .. ownerName .. ", skipping loot generation")
+            Osi.ApplyStatus(containerGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
+            return
+        end
+
+        -- Also check if it's a player character (opened from player inventory)
+        if Osi.IsPlayer(containerOwner) == 1 then
+            local ownerName = Osi.GetDisplayName(containerOwner) or "Player"
+            print("[REL_SE] Container is in " .. ownerName .. "'s inventory, skipping loot generation")
             Osi.ApplyStatus(containerGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
             return
         end
