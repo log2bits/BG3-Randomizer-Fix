@@ -190,19 +190,14 @@ function GenerateConsumables(targetGuid, targetName)
     end
 end
 
--- Generate items for trader and track them for later removal
+-- Generate items for trader (no tracking needed - just add items)
 function GenerateTraderItems(traderGuid, traderName)
-    local addedItems = {}
-
     -- Generate regular items
     local itemCount = Get("traderItemCount") or 5
     print("[REL_SE] Generating " .. itemCount .. " items for: " .. traderName)
     for i = 1, itemCount do
         print("[REL_SE] Generating item " .. i .. "/" .. itemCount)
-        local uuid = GenerateRandomItem(traderGuid, traderName)
-        if uuid then
-            table.insert(addedItems, uuid)
-        end
+        GenerateRandomItem(traderGuid, traderName)
     end
 
     -- Generate consumables using trader-specific settings
@@ -216,56 +211,20 @@ function GenerateTraderItems(traderGuid, traderName)
 
     for i = 1, scrollCount do
         print("[REL_SE] Generating scroll " .. i .. "/" .. scrollCount)
-        local uuid = GenerateConsumable(traderGuid, traderName, "scroll")
-        if uuid then
-            table.insert(addedItems, uuid)
-        end
+        GenerateConsumable(traderGuid, traderName, "scroll")
     end
 
     for i = 1, potionCount do
         print("[REL_SE] Generating potion " .. i .. "/" .. potionCount)
-        local uuid = GenerateConsumable(traderGuid, traderName, "potion")
-        if uuid then
-            table.insert(addedItems, uuid)
-        end
+        GenerateConsumable(traderGuid, traderName, "potion")
     end
 
     for i = 1, arrowCount do
         print("[REL_SE] Generating arrow " .. i .. "/" .. arrowCount)
-        local uuid = GenerateConsumable(traderGuid, traderName, "arrow")
-        if uuid then
-            table.insert(addedItems, uuid)
-        end
+        GenerateConsumable(traderGuid, traderName, "arrow")
     end
 
     print("[REL_SE] Finished generating items for: " .. traderName)
-    return addedItems
-end
-
--- Remove previously generated items from trader
-function ClearTraderItems(traderGuid, traderName)
-    local generatedItems = Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid]
-
-    if not generatedItems or #generatedItems == 0 then
-        print("[REL_SE] No previous items to clear for: " .. traderName)
-        return
-    end
-
-    print("[REL_SE] Clearing " .. #generatedItems .. " previous items from: " .. traderName)
-
-    for _, templateUuid in ipairs(generatedItems) do
-        -- Remove all instances of this template from trader's inventory
-        local removedCount = 0
-        while Osi.TemplateIsInInventory(templateUuid, traderGuid) == 1 do
-            Osi.TemplateRemoveFrom(templateUuid, traderGuid, 1)
-            removedCount = removedCount + 1
-        end
-        if removedCount > 0 then
-            print("[REL_SE] Removed " .. removedCount .. " x " .. templateUuid)
-        end
-    end
-
-    print("[REL_SE] Finished clearing items from: " .. traderName)
 end
 
 -- Generate a random item and add it to container/trader
@@ -488,18 +447,16 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         print("[REL_SE] ======================================")
         print("[REL_SE] Trader opened: " .. name)
 
-        -- Clear old items from previous long rest
-        ClearTraderItems(traderGuid, name)
+        -- Generate new items (cumulative - old items remain)
+        GenerateTraderItems(traderGuid, name)
 
-        -- Generate new items and track them
-        local addedItems = GenerateTraderItems(traderGuid, name)
-
-        -- Store the generated items for next reshuffle
-        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = addedItems
+        -- Mark this trader as visited
+        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = true
 
         -- Apply LOOT_DISTRIBUTED status
         Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
         print("[REL_SE] Applied LOOT_DISTRIBUTED_TRADER status to: " .. name)
+        print("[REL_SE] Trader inventory will refresh after long rest")
         print("[REL_SE] ======================================")
     end
 end)
@@ -547,7 +504,8 @@ function ForceShuffleAllTraders()
         end
     end
 
-    print("[REL_SE] Reset " .. tradersShuffled .. " traders - they will reshuffle when next opened")
+    print("[REL_SE] Reset " .. tradersShuffled .. " traders - they will get NEW items when next opened")
+    print("[REL_SE] Note: Old trader items remain, new items are added on top (cumulative)")
     print("[REL_SE] ======================================")
 end
 
