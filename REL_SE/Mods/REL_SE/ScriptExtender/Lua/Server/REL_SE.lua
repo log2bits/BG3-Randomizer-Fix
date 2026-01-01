@@ -375,6 +375,27 @@ function IsBlacklisted(name)
 end
 
 -- ====================================================================
+-- COMMON CONTAINER CHECK
+-- ====================================================================
+
+-- Common containers (barrels, crates, trunks, etc.) have lower spawn chance
+local commonContainerPatterns = {
+    "Barrel", "Crate", "Trunk", "Vase",
+    "Pile of Books", "Row of Books", "Stack of Books", "Shelf",
+    "Table", "Desk", "Bottle Rack", "Fish Barrel",
+    "Loose Plank", "Open Crate", "Wardrobe"
+}
+
+function IsCommonContainer(name)
+    for _, pattern in ipairs(commonContainerPatterns) do
+        if string.find(name, pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+-- ====================================================================
 -- CONTAINER LOOT DISTRIBUTION
 -- ====================================================================
 
@@ -398,6 +419,28 @@ Ext.Osiris.RegisterListener("UseStarted", 2, "before", function(_, containerGuid
     if IsBlacklisted(name) then
         Osi.ApplyStatus(containerGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
         return
+    end
+
+    -- Check if container is in someone's inventory (being opened from trade window)
+    local entity = Ext.Entity.Get(containerGuid)
+    if entity and entity.InventoryMember and entity.InventoryMember.Inventory then
+        local parentInventory = Ext.Entity.Get(entity.InventoryMember.Inventory)
+        if parentInventory and parentInventory.InventoryOwner then
+            print("[REL_SE] Container is in someone's inventory, skipping loot generation")
+            Osi.ApplyStatus(containerGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
+            return
+        end
+    end
+
+    -- Check if common container (barrels, crates, etc.) - 1 in 5 chance
+    if IsCommonContainer(name) then
+        local roll = math.random(1, 5)
+        if roll ~= 1 then
+            print("[REL_SE] Common container - failed spawn roll (" .. roll .. "/5), skipping")
+            Osi.ApplyStatus(containerGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
+            return
+        end
+        print("[REL_SE] Common container - passed spawn roll (1/5)!")
     end
 
     -- Get item count from config
