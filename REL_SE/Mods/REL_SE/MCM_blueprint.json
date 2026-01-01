@@ -104,6 +104,51 @@
             ]
         },
         {
+            "TabName": "Consumables",
+            "TabId": "Consumables",
+            "Sections": [
+                {
+                    "SectionId": "consumable_counts",
+                    "SectionName": "Consumable Counts",
+                    "Settings": [
+                        {
+                            "Id": "scrollCount",
+                            "Name": "Scroll Count",
+                            "Type": "slider_int",
+                            "Default": 1,
+                            "Description": "How many scrolls to spawn in addition to regular items. Scrolls are picked randomly from the loot list.",
+                            "Options": {
+                                "Min": 0,
+                                "Max": 20
+                            }
+                        },
+                        {
+                            "Id": "potionCount",
+                            "Name": "Potion Count",
+                            "Type": "slider_int",
+                            "Default": 1,
+                            "Description": "How many potions to spawn in addition to regular items. Potions are picked randomly from the loot list.",
+                            "Options": {
+                                "Min": 0,
+                                "Max": 20
+                            }
+                        },
+                        {
+                            "Id": "arrowCount",
+                            "Name": "Arrow Count",
+                            "Type": "slider_int",
+                            "Default": 0,
+                            "Description": "How many arrows to spawn in addition to regular items. Arrows are picked randomly from the loot list.",
+                            "Options": {
+                                "Min": 0,
+                                "Max": 20
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
             "TabName": "Trader Settings",
             "TabId": "Traders",
             "Sections": [

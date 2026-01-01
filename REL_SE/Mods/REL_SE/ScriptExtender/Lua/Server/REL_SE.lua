@@ -112,6 +112,64 @@ function GetItemsByRarity(rarity)
     return items
 end
 
+-- Get all items of a specific type (e.g., "scroll", "potion", "arrow")
+function GetItemsByType(itemType)
+    local items = {}
+    for i, item in ipairs(BigList) do
+        if item.item_type == itemType then
+            table.insert(items, i)
+        end
+    end
+    return items
+end
+
+-- Generate a random consumable of a specific type
+function GenerateConsumable(targetGuid, targetName, consumableType)
+    local itemsOfType = GetItemsByType(consumableType)
+
+    if #itemsOfType == 0 then
+        print("[REL_SE] No " .. consumableType .. "s found in loot list")
+        return false
+    end
+
+    -- Pick a random item of this type
+    local randomIndex = itemsOfType[math.random(1, #itemsOfType)]
+    local item = BigList[randomIndex]
+
+    print("[REL_SE] Adding " .. consumableType .. ": " .. item.item_name .. " to " .. targetName)
+    Osi.TemplateAddTo(item.item_uuid, targetGuid, 1, 0)
+    return true
+end
+
+-- Generate multiple consumables
+function GenerateConsumables(targetGuid, targetName)
+    local scrollCount = Get("scrollCount") or 0
+    local potionCount = Get("potionCount") or 0
+    local arrowCount = Get("arrowCount") or 0
+
+    if scrollCount > 0 or potionCount > 0 or arrowCount > 0 then
+        print("[REL_SE] --- Generating Consumables ---")
+    end
+
+    -- Generate scrolls
+    for i = 1, scrollCount do
+        print("[REL_SE] Generating scroll " .. i .. "/" .. scrollCount)
+        GenerateConsumable(targetGuid, targetName, "scroll")
+    end
+
+    -- Generate potions
+    for i = 1, potionCount do
+        print("[REL_SE] Generating potion " .. i .. "/" .. potionCount)
+        GenerateConsumable(targetGuid, targetName, "potion")
+    end
+
+    -- Generate arrows
+    for i = 1, arrowCount do
+        print("[REL_SE] Generating arrow " .. i .. "/" .. arrowCount)
+        GenerateConsumable(targetGuid, targetName, "arrow")
+    end
+end
+
 -- Generate a random item and add it to container/trader
 function GenerateRandomItem(targetGuid, targetName)
     if #BigList == 0 then
@@ -226,6 +284,9 @@ Ext.Osiris.RegisterListener("UseStarted", 2, "before", function(_, containerGuid
     -- Generate items
     GenerateMultipleItems(containerGuid, name, itemCount)
 
+    -- Generate consumables
+    GenerateConsumables(containerGuid, name)
+
     -- Apply LOOT_DISTRIBUTED status so it won't be looted again
     Osi.ApplyStatus(containerGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
     print("[REL_SE] Applied LOOT_DISTRIBUTED_OBJECT status to: " .. name)
@@ -274,6 +335,9 @@ Ext.Osiris.RegisterListener("RequestCanLoot", 2, "before", function(looter, targ
 
     -- Generate items
     GenerateMultipleItems(targetGuid, name, itemCount)
+
+    -- Generate consumables
+    GenerateConsumables(targetGuid, name)
 
     -- Apply LOOT_DISTRIBUTED status
     Osi.ApplyStatus(targetGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
@@ -329,6 +393,9 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
 
         -- Generate items
         GenerateMultipleItems(traderGuid, name, itemCount)
+
+        -- Generate consumables
+        GenerateConsumables(traderGuid, name)
 
         -- Apply LOOT_DISTRIBUTED status
         Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
