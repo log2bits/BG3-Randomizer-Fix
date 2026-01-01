@@ -191,53 +191,38 @@ function GenerateConsumables(targetGuid, targetName)
     end
 end
 
--- Clear ALL items from a trader's inventory (not just tracked ones)
+-- Store which trader is currently being cleared (for EntityEvent listener)
+Mods.REL_SE.CurrentlyClearingTrader = nil
+
+-- Clear ALL items from a trader's inventory using proper Osiris functions
 function ClearTraderItems(traderGuid, traderName)
     print("[REL_SE] Clearing ALL items from trader: " .. traderName)
 
-    local entity = Ext.Entity.Get(traderGuid)
-    if not entity or not entity.InventoryOwner then
-        print("[REL_SE] ERROR: Could not access trader inventory for: " .. traderName)
-        return
-    end
+    -- Store the trader GUID so the EntityEvent listener knows which trader to clear
+    Mods.REL_SE.CurrentlyClearingTrader = traderGuid
 
-    local inventoryOwner = entity.InventoryOwner
-    if not inventoryOwner.Inventories then
-        print("[REL_SE] No inventories found for: " .. traderName)
-        return
-    end
+    -- Use IterateInventory to trigger events for each item in trader's inventory
+    Osi.IterateInventory(traderGuid, "REL_SE_ClearTrader", "REL_SE_ClearTrader_Finished")
 
-    local itemsCleared = 0
+    -- Clear the reference after iteration completes
+    Mods.REL_SE.CurrentlyClearingTrader = nil
 
-    -- Iterate through all inventories
-    for _, inventory in pairs(inventoryOwner.Inventories) do
-        local inventoryEntity = Ext.Entity.Get(inventory)
-        if inventoryEntity and inventoryEntity.InventoryContainer then
-            local items = inventoryEntity.InventoryContainer.Items
-            if items then
-                -- Collect item GUIDs first to avoid modifying during iteration
-                local itemGuids = {}
-                for _, item in pairs(items) do
-                    -- Safety check: some items may not have a Uuid
-                    if item.Item and item.Item.Uuid and item.Item.Uuid.EntityUuid then
-                        table.insert(itemGuids, item.Item.Uuid.EntityUuid)
-                    end
-                end
+    print("[REL_SE] Finished clearing trader: " .. traderName)
+end
 
-                -- Remove all items
-                for _, itemGuid in ipairs(itemGuids) do
-                    Osi.RequestDelete(itemGuid)
-                    itemsCleared = itemsCleared + 1
-                end
-            end
+-- Event listener for clearing trader items
+Ext.Osiris.RegisterListener("EntityEvent", 2, "after", function(item, event)
+    if event == "REL_SE_ClearTrader" and Mods.REL_SE.CurrentlyClearingTrader then
+        local template = Osi.GetTemplate(item)
+        local traderGuid = Mods.REL_SE.CurrentlyClearingTrader
+
+        if template ~= nil and Osi.TemplateIsInInventory(template, traderGuid) == 1 then
+            -- Remove all instances of this template from the trader (up to 9999)
+            Osi.TemplateRemoveFrom(template, traderGuid, 9999)
+            print("[REL_SE] Removed item template: " .. template)
         end
     end
-
-    -- Clear the tracking table
-    Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid] = {}
-
-    print("[REL_SE] Successfully cleared " .. itemsCleared .. " items from trader")
-end
+end)
 
 -- Generate items for trader and track them for clearing
 function GenerateTraderItems(traderGuid, traderName)
@@ -491,40 +476,46 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         return
     end
 
-    -- Check if trader has status and already rolled this long rest
-    if Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1 then
-        -- Check if already processed this long rest
-        for _, processedTrader in ipairs(Mods.REL_SE.PersistentVars.Trader.StatusRemoved) do
-            if processedTrader == traderGuid then
-                print("[REL_SE] Trader " .. name .. " already rolled this long rest")
-                return
-            end
+    -- Check if already processed this session/long rest
+    for _, processedTrader in ipairs(Mods.REL_SE.PersistentVars.Trader.StatusRemoved) do
+        if processedTrader == traderGuid then
+            print("[REL_SE] Trader " .. name .. " already shuffled this long rest")
+            return
         end
-
-        -- Remove status to allow re-rolling (after long rest)
-        Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
-        table.insert(Mods.REL_SE.PersistentVars.Trader.StatusRemoved, traderGuid)
-        print("[REL_SE] Removed LOOT_DISTRIBUTED_TRADER status from: " .. name .. " (preparing for reshuffle)")
     end
 
-    -- Check if not already processed
-    if Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 0 then
+    -- Check if trader has NEVER been processed OR if they have the status (meaning it's a new long rest)
+    local needsProcessing = false
+
+    if Osi.HasActiveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER") == 1 then
+        -- Trader was already processed before, and a long rest happened
+        -- Remove the status to allow re-processing
+        Osi.RemoveStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER")
+        needsProcessing = true
+        print("[REL_SE] Long rest detected for trader: " .. name)
+    elseif not Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] then
+        -- Trader has never been processed
+        needsProcessing = true
+        print("[REL_SE] First time encountering trader: " .. name)
+    end
+
+    if needsProcessing then
         print("[REL_SE] ======================================")
-        print("[REL_SE] Trader opened: " .. name)
+        print("[REL_SE] Processing trader: " .. name)
+
+        -- Mark as processed FIRST to prevent double-processing
+        table.insert(Mods.REL_SE.PersistentVars.Trader.StatusRemoved, traderGuid)
+        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = true
 
         -- ALWAYS clear ALL items from trader (including vanilla items)
         ClearTraderItems(traderGuid, name)
 
-        -- Add 10,000 gold to trader
+        -- Add 10,000 gold to trader using proper Osiris function
         print("[REL_SE] Adding 10,000 gold to: " .. name)
-        -- Using gold coin template UUID
-        Osi.TemplateAddTo("6ef69911-79d1-48e7-b024-fa2f4e03c1f2", traderGuid, 10000, 0)
+        Osi.AddGold(traderGuid, 10000)
 
         -- Generate new items
         GenerateTraderItems(traderGuid, name)
-
-        -- Mark this trader as visited
-        Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = true
 
         -- Apply LOOT_DISTRIBUTED status
         Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
