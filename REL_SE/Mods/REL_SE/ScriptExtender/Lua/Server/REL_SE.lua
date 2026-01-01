@@ -191,62 +191,48 @@ function GenerateConsumables(targetGuid, targetName)
     end
 end
 
--- Store which trader is currently being cleared (for EntityEvent listener)
-Mods.REL_SE.CurrentlyClearingTrader = nil
-
--- Clear ALL items from a trader's inventory using proper Osiris functions
+-- Clear ALL items from a trader's inventory (SYNCHRONOUS)
 function ClearTraderItems(traderGuid, traderName)
     print("[REL_SE] Clearing ALL items from trader: " .. traderName)
 
-    -- Store the trader GUID so the EntityEvent listener knows which trader to clear
-    Mods.REL_SE.CurrentlyClearingTrader = traderGuid
+    local entity = Ext.Entity.Get(traderGuid)
+    if not entity or not entity.InventoryOwner then
+        print("[REL_SE] ERROR: Trader has no InventoryOwner component")
+        return
+    end
 
-    -- Use IterateInventory to trigger events for each item in trader's inventory
-    Osi.IterateInventory(traderGuid, "REL_SE_ClearTrader", "REL_SE_ClearTrader_Finished")
+    local itemsCleared = 0
 
-    -- DON'T clear CurrentlyClearingTrader here - it's async!
-    -- The Finished event listener will clear it
-end
-
--- Event listener for clearing individual trader items
-Ext.Osiris.RegisterListener("EntityEvent", 2, "after", function(item, event)
-    if event == "REL_SE_ClearTrader" and Mods.REL_SE.CurrentlyClearingTrader then
-        local template = Osi.GetTemplate(item)
-        local traderGuid = Mods.REL_SE.CurrentlyClearingTrader
-
-        if template ~= nil and Osi.TemplateIsInInventory(template, traderGuid) == 1 then
-            -- Remove all instances of this template from the trader (up to 9999)
-            Osi.TemplateRemoveFrom(template, traderGuid, 9999)
-            print("[REL_SE] Removed item template: " .. template)
+    -- Clear primary inventory
+    if entity.InventoryOwner.PrimaryInventory and entity.InventoryOwner.PrimaryInventory.InventoryContainer then
+        local items = entity.InventoryOwner.PrimaryInventory.InventoryContainer.Items
+        if items then
+            for _, p in pairs(items) do
+                if p.Item and p.Item.Uuid and p.Item.Uuid.EntityUuid then
+                    Osi.RequestDelete(p.Item.Uuid.EntityUuid)
+                    itemsCleared = itemsCleared + 1
+                end
+            end
         end
     end
-end)
 
--- Event listener for when clearing is FINISHED
-Ext.Osiris.RegisterListener("EntityEvent", 2, "after", function(entity, event)
-    if event == "REL_SE_ClearTrader_Finished" then
-        local traderGuid = entity
-
-        -- Clear the reference now that iteration is complete
-        Mods.REL_SE.CurrentlyClearingTrader = nil
-
-        local name = Osi.ResolveTranslatedString(Ext.Entity.Get(traderGuid).DisplayName.NameKey.Handle.Handle)
-        print("[REL_SE] Finished clearing trader: " .. name)
-
-        -- NOW it's safe to add gold and generate items
-        print("[REL_SE] Adding 10,000 gold to: " .. name)
-        Osi.AddGold(traderGuid, 10000)
-
-        -- Generate new items
-        GenerateTraderItems(traderGuid, name)
-
-        -- Apply LOOT_DISTRIBUTED status
-        Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
-        print("[REL_SE] Applied LOOT_DISTRIBUTED_TRADER status to: " .. name)
-        print("[REL_SE] Trader inventory will refresh after long rest")
-        print("[REL_SE] ======================================")
+    -- Also clear all other inventories (traders may have multiple)
+    if entity.InventoryOwner.Inventories then
+        for _, inventory in pairs(entity.InventoryOwner.Inventories) do
+            local invEntity = Ext.Entity.Get(inventory)
+            if invEntity and invEntity.InventoryContainer and invEntity.InventoryContainer.Items then
+                for _, p in pairs(invEntity.InventoryContainer.Items) do
+                    if p.Item and p.Item.Uuid and p.Item.Uuid.EntityUuid then
+                        Osi.RequestDelete(p.Item.Uuid.EntityUuid)
+                        itemsCleared = itemsCleared + 1
+                    end
+                end
+            end
+        end
     end
-end)
+
+    print("[REL_SE] Successfully cleared " .. itemsCleared .. " items from trader")
+end
 
 -- Generate items for trader and track them for clearing
 function GenerateTraderItems(traderGuid, traderName)
@@ -531,11 +517,21 @@ Ext.Osiris.RegisterListener("RequestTrade", 4, "before", function(_, traderGuid,
         table.insert(Mods.REL_SE.PersistentVars.Trader.StatusRemoved, traderGuid)
         Mods.REL_SE.PersistentVars.Trader.Generated[traderGuid] = true
 
-        -- Start clearing - the Finished callback will handle gold/items/status
+        -- Clear ALL items from trader (SYNCHRONOUS - completes immediately)
         ClearTraderItems(traderGuid, name)
 
-        -- DON'T add gold or items here - they're added in the Finished callback
-        -- This prevents the race condition where items are added before clearing completes
+        -- Add 10,000 gold to trader
+        print("[REL_SE] Adding 10,000 gold to: " .. name)
+        Osi.AddGold(traderGuid, 10000)
+
+        -- Generate new items
+        GenerateTraderItems(traderGuid, name)
+
+        -- Apply LOOT_DISTRIBUTED status
+        Osi.ApplyStatus(traderGuid, "LOOT_DISTRIBUTED_TRADER", -1)
+        print("[REL_SE] Applied LOOT_DISTRIBUTED_TRADER status to: " .. name)
+        print("[REL_SE] Trader inventory will refresh after long rest")
+        print("[REL_SE] ======================================")
     end
 end)
 
