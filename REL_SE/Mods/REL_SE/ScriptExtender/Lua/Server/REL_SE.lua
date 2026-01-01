@@ -112,96 +112,6 @@ function GetItemsByRarity(rarity)
     return items
 end
 
--- Get all items of a specific type and rarity
-function GetItemsByTypeAndRarity(itemType, rarity)
-    local items = {}
-    for i, item in ipairs(BigList) do
-        if item.item_type == itemType and item.item_rarity == rarity then
-            table.insert(items, i)
-        end
-    end
-    return items
-end
-
--- Generate a random consumable of a specific type using rarity distribution
--- Returns the item UUID if successful, nil otherwise
--- containerName parameter is used to check if common container (for spawn chance)
-function GenerateConsumable(targetGuid, targetName, consumableType, containerName)
-    -- Check if common container and apply per-item spawn chance
-    if containerName and IsCommonContainer(containerName) then
-        local spawnChance = Get("commonContainerSpawnChance") or 20
-        local roll = math.random(1, 100)
-        if roll > spawnChance then
-            print("[REL_SE] Common container consumable - failed spawn roll (" .. roll .. "/" .. spawnChance .. "%), skipping this " .. consumableType)
-            return nil
-        end
-        print("[REL_SE] Common container consumable - passed spawn roll (" .. roll .. "/" .. spawnChance .. "%)")
-    end
-
-    -- Roll for rarity using same distribution as regular items
-    local rarity = RollRarity()
-    print("[REL_SE] Rolled rarity for " .. consumableType .. ": " .. rarity)
-
-    -- Get consumables of this type and rarity
-    local itemsOfTypeAndRarity = GetItemsByTypeAndRarity(consumableType, rarity)
-
-    -- If no items of that rarity, try next lower rarity
-    while #itemsOfTypeAndRarity == 0 and rarity ~= "uncommon" do
-        print("[REL_SE] No " .. consumableType .. "s found for rarity: " .. rarity .. ", trying lower rarity...")
-        if rarity == "legendary" then
-            rarity = "very rare"
-        elseif rarity == "very rare" then
-            rarity = "rare"
-        elseif rarity == "rare" then
-            rarity = "uncommon"
-        end
-        itemsOfTypeAndRarity = GetItemsByTypeAndRarity(consumableType, rarity)
-    end
-
-    -- If still no items found, skip this consumable
-    if #itemsOfTypeAndRarity == 0 then
-        print("[REL_SE] No " .. consumableType .. "s found in loot list for any rarity, skipping")
-        return nil
-    end
-
-    -- Pick a random item from the filtered list
-    local randomIndex = itemsOfTypeAndRarity[math.random(1, #itemsOfTypeAndRarity)]
-    local item = BigList[randomIndex]
-
-    print("[REL_SE] Adding " .. consumableType .. ": " .. item.item_name .. " (" .. rarity .. ") to " .. targetName)
-    Osi.TemplateAddTo(item.item_uuid, targetGuid, 1, 0)
-    return item.item_uuid
-end
-
--- Generate multiple consumables
--- containerName parameter is passed to GenerateConsumable for spawn chance check
-function GenerateConsumables(targetGuid, targetName, containerName)
-    local scrollCount = Get("scrollCount") or 0
-    local potionCount = Get("potionCount") or 0
-    local arrowCount = Get("arrowCount") or 0
-
-    if scrollCount > 0 or potionCount > 0 or arrowCount > 0 then
-        print("[REL_SE] --- Generating Consumables ---")
-    end
-
-    -- Generate scrolls
-    for i = 1, scrollCount do
-        print("[REL_SE] Generating scroll " .. i .. "/" .. scrollCount)
-        GenerateConsumable(targetGuid, targetName, "scroll", containerName)
-    end
-
-    -- Generate potions
-    for i = 1, potionCount do
-        print("[REL_SE] Generating potion " .. i .. "/" .. potionCount)
-        GenerateConsumable(targetGuid, targetName, "potion", containerName)
-    end
-
-    -- Generate arrows
-    for i = 1, arrowCount do
-        print("[REL_SE] Generating arrow " .. i .. "/" .. arrowCount)
-        GenerateConsumable(targetGuid, targetName, "arrow", containerName)
-    end
-end
 
 -- Clear ALL items from a trader's inventory using TemplateRemoveFrom
 function ClearTraderItems(traderGuid, traderName)
@@ -263,45 +173,12 @@ function GenerateTraderItems(traderGuid, traderName)
     -- Initialize tracking table for this trader
     Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid] = Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid] or {}
 
-    -- Generate regular items (no container name for traders, so no spawn chance reduction)
-    local itemCount = Get("traderItemCount") or 5
+    -- Generate items (no container name for traders, so no spawn chance reduction)
+    local itemCount = Get("traderItemCount") or 10
     print("[REL_SE] Generating " .. itemCount .. " items for: " .. traderName)
     for i = 1, itemCount do
         print("[REL_SE] Generating item " .. i .. "/" .. itemCount)
         local itemUuid = GenerateRandomItem(traderGuid, traderName, nil)
-        if itemUuid then
-            table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
-        end
-    end
-
-    -- Generate consumables using trader-specific settings (no spawn chance reduction)
-    local scrollCount = Get("traderScrollCount") or 2
-    local potionCount = Get("traderPotionCount") or 3
-    local arrowCount = Get("traderArrowCount") or 1
-
-    if scrollCount > 0 or potionCount > 0 or arrowCount > 0 then
-        print("[REL_SE] --- Generating Consumables ---")
-    end
-
-    for i = 1, scrollCount do
-        print("[REL_SE] Generating scroll " .. i .. "/" .. scrollCount)
-        local itemUuid = GenerateConsumable(traderGuid, traderName, "scroll", nil)
-        if itemUuid then
-            table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
-        end
-    end
-
-    for i = 1, potionCount do
-        print("[REL_SE] Generating potion " .. i .. "/" .. potionCount)
-        local itemUuid = GenerateConsumable(traderGuid, traderName, "potion", nil)
-        if itemUuid then
-            table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
-        end
-    end
-
-    for i = 1, arrowCount do
-        print("[REL_SE] Generating arrow " .. i .. "/" .. arrowCount)
-        local itemUuid = GenerateConsumable(traderGuid, traderName, "arrow", nil)
         if itemUuid then
             table.insert(Mods.REL_SE.PersistentVars.Trader.ItemsAdded[traderGuid], itemUuid)
         end
@@ -469,13 +346,10 @@ Ext.Osiris.RegisterListener("UseStarted", 2, "before", function(_, containerGuid
     end
 
     -- Get item count from config
-    local itemCount = Get("containerItemCount") or 1
+    local itemCount = Get("containerItemCount") or 3
 
     -- Generate items (each item will check spawn chance individually if common container)
     GenerateMultipleItems(containerGuid, name, itemCount, name)
-
-    -- Generate consumables (each consumable will check spawn chance individually if common container)
-    GenerateConsumables(containerGuid, name, name)
 
     -- Apply LOOT_DISTRIBUTED status so it won't be looted again
     Osi.ApplyStatus(containerGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
@@ -525,9 +399,6 @@ Ext.Osiris.RegisterListener("RequestCanLoot", 2, "before", function(looter, targ
 
     -- Generate items (no container name for enemies, so no spawn chance reduction)
     GenerateMultipleItems(targetGuid, name, itemCount, nil)
-
-    -- Generate consumables (no container name for enemies, so no spawn chance reduction)
-    GenerateConsumables(targetGuid, name, nil)
 
     -- Apply LOOT_DISTRIBUTED status
     Osi.ApplyStatus(targetGuid, "LOOT_DISTRIBUTED_OBJECT", -1)
